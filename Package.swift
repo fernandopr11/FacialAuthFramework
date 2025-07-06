@@ -6,7 +6,7 @@ import PackageDescription
 let package = Package(
     name: "FacialAuthFramework",
     platforms: [
-        .iOS(.v13)
+        .iOS(.v15)  // Cambiado a iOS 15+ para TrueDepth y funciones modernas
     ],
     products: [
         // Products define the executables and libraries a package produces, making them visible to other packages.
@@ -18,7 +18,12 @@ let package = Package(
         // Targets are the basic building blocks of a package, defining a module or a test suite.
         // Targets can depend on other targets in this package and products from dependencies.
         .target(
-            name: "FacialAuthFramework"),
+            name: "FacialAuthFramework",
+            dependencies: [],
+            resources: [
+                .process("Resources/")  // Incluye tu modelo .mlmodel
+            ]
+        ),
         .testTarget(
             name: "FacialAuthFrameworkTests",
             dependencies: ["FacialAuthFramework"]
