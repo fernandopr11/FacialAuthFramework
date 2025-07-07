@@ -1,4 +1,4 @@
-// swift-tools-version: 6.1
+// swift-tools-version: 5.9
 // The swift-tools-version declares the minimum version of Swift required to build this package.
 
 import PackageDescription
@@ -6,27 +6,35 @@ import PackageDescription
 let package = Package(
     name: "FacialAuthFramework",
     platforms: [
-        .iOS(.v15)  // Cambiado a iOS 15+ para TrueDepth y funciones modernas
+        .iOS(.v15)  // Para TrueDepth y funciones modernas
     ],
     products: [
-        // Products define the executables and libraries a package produces, making them visible to other packages.
+        // Framework principal
         .library(
             name: "FacialAuthFramework",
-            targets: ["FacialAuthFramework"]),
+            targets: ["FacialAuthFramework"]
+        ),
     ],
+    dependencies: [],
     targets: [
-        // Targets are the basic building blocks of a package, defining a module or a test suite.
-        // Targets can depend on other targets in this package and products from dependencies.
+        // Target principal del framework
         .target(
             name: "FacialAuthFramework",
             dependencies: [],
+            path: "Sources/FacialAuthFramework",
             resources: [
-                .process("Resources/")  // Incluye tu modelo .mlmodel
+                // Solo process - incluye todos los archivos de Resources
+                .process("Resources")
+            ],
+            swiftSettings: [
+                .define("SWIFT_PACKAGE")
             ]
         ),
-        .testTarget(
-            name: "FacialAuthFrameworkTests",
-            dependencies: ["FacialAuthFramework"]
-        ),
+        
+       .testTarget(
+           name: "FacialAuthFrameworkTests",
+           dependencies: ["FacialAuthFramework"],
+           path: "Tests/FacialAuthFrameworkTests"
+       ),
     ]
 )
