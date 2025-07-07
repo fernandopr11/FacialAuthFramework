@@ -25,10 +25,10 @@ internal class EncryptionManager {
         // Encriptar embeddings
         let encryptedEmbeddings = try secureEmbeddingManager.encryptEmbeddings(embeddings)
         
-        // Crear perfil con embeddings encriptados
+        // ✅ USAR EL DISPLAY NAME REAL, NO "Usuario {userId}"
         let profile = UserProfile(
             userId: userId,
-            displayName: displayName,
+            displayName: displayName, // ✅ ESTE ES EL CAMBIO IMPORTANTE
             encryptedEmbeddings: encryptedEmbeddings,
             samplesCount: 1
         )

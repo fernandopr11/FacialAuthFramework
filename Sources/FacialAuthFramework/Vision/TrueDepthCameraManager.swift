@@ -11,6 +11,7 @@ internal class TrueDepthCameraManager: NSObject {
     private var frontCameraInput: AVCaptureDeviceInput?
     private var photoOutput: AVCapturePhotoOutput?
     private var depthDataOutput: AVCaptureDepthDataOutput?
+    private var videoOutput: AVCaptureVideoDataOutput?
     private var videoPreviewLayer: AVCaptureVideoPreviewLayer?
     
     private let debugMode: Bool
@@ -18,6 +19,9 @@ internal class TrueDepthCameraManager: NSObject {
     
     // Delegate para callbacks
     internal weak var delegate: CameraManagerDelegate?
+    
+    // ✅ AGREGAR: Queue para video processing
+    private let videoQueue = DispatchQueue(label: "com.facialauth.video", qos: .userInitiated)
     
     // Estado de captura
     private var isCapturing = false
@@ -42,7 +46,7 @@ internal class TrueDepthCameraManager: NSObject {
             throw CameraError.permissionDenied
         }
         
-        // Configurar sesión
+        // ✅ MOVER A BACKGROUND THREAD
         let session = AVCaptureSession()
         
         // Configurar calidad
@@ -55,6 +59,7 @@ internal class TrueDepthCameraManager: NSObject {
         
         // Configurar outputs
         try configurePhotoOutput(session: session)
+        try configureVideoOutput(session: session) // ✅ AGREGAR VIDEO OUTPUT
         try configureDepthOutput(session: session)
         
         self.captureSession = session
@@ -74,15 +79,20 @@ internal class TrueDepthCameraManager: NSObject {
         }
         
         if !isSessionRunning {
-            Task {
+            // ✅ MOVER A BACKGROUND THREAD
+            Task.detached { [weak self] in
                 session.startRunning()
-                isSessionRunning = true
                 
-                if debugMode {
-                    print("▶️ TrueDepthCamera: Sesión iniciada")
+                await MainActor.run { [weak self] in
+                    guard let self = self else { return }
+                    self.isSessionRunning = true
+                    
+                    if self.debugMode {
+                        print("▶️ TrueDepthCamera: Sesión iniciada")
+                    }
+                    
+                    self.delegate?.cameraDidStart()
                 }
-                
-                delegate?.cameraDidStart()
             }
         }
     }
@@ -92,14 +102,30 @@ internal class TrueDepthCameraManager: NSObject {
         guard let session = captureSession else { return }
         
         if isSessionRunning {
-            session.stopRunning()
-            isSessionRunning = false
-            
-            if debugMode {
-                print("⏹️ TrueDepthCamera: Sesión detenida")
+            // ✅ MOVER A BACKGROUND THREAD
+            Task.detached { [weak self] in
+                session.stopRunning()
+                
+                await MainActor.run { [weak self] in
+                    guard let self = self else { return }
+                    self.isSessionRunning = false
+                    
+                    if self.debugMode {
+                        print("⏹️ TrueDepthCamera: Sesión detenida")
+                    }
+                    
+                    self.delegate?.cameraDidStop()
+                }
             }
-            
-            delegate?.cameraDidStop()
+        }
+    }
+    
+    /// ✅ NUEVO: Configurar delegate para video frames
+    internal func setVideoDelegate(_ delegate: AVCaptureVideoDataOutputSampleBufferDelegate) {
+        videoOutput?.setSampleBufferDelegate(delegate, queue: videoQueue)
+        
+        if debugMode {
+            print("📹 TrueDepthCamera: Video delegate configurado")
         }
     }
     
@@ -148,6 +174,10 @@ internal class TrueDepthCameraManager: NSObject {
         if videoPreviewLayer == nil {
             videoPreviewLayer = AVCaptureVideoPreviewLayer(session: session)
             videoPreviewLayer?.videoGravity = .resizeAspectFill
+            
+            if debugMode {
+                print("📺 TrueDepthCamera: Preview layer creado")
+            }
         }
         
         return videoPreviewLayer
@@ -166,6 +196,7 @@ internal class TrueDepthCameraManager: NSObject {
         frontCamera = nil
         frontCameraInput = nil
         photoOutput = nil
+        videoOutput = nil // ✅ AGREGAR
         depthDataOutput = nil
         videoPreviewLayer = nil
         
@@ -261,6 +292,30 @@ private extension TrueDepthCameraManager {
         }
     }
     
+    // ✅ NUEVO: Configurar video output para frames en tiempo real
+    func configureVideoOutput(session: AVCaptureSession) throws {
+        let output = AVCaptureVideoDataOutput()
+        
+        // Configurar formato de pixel
+        output.videoSettings = [
+            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA
+        ]
+        
+        // Descartar frames si el processing está ocupado
+        output.alwaysDiscardsLateVideoFrames = true
+        
+        guard session.canAddOutput(output) else {
+            throw CameraError.cannotAddOutput
+        }
+        
+        session.addOutput(output)
+        self.videoOutput = output
+        
+        if debugMode {
+            print("📹 TrueDepthCamera: Video output configurado")
+        }
+    }
+    
     func configureDepthOutput(session: AVCaptureSession) throws {
         let output = AVCaptureDepthDataOutput()
         
@@ -285,6 +340,7 @@ private extension TrueDepthCameraManager {
         }
     }
 }
+
 // MARK: - AVCapturePhotoCaptureDelegate
 extension TrueDepthCameraManager: AVCapturePhotoCaptureDelegate {
 
@@ -335,8 +391,6 @@ extension TrueDepthCameraManager: AVCapturePhotoCaptureDelegate {
         }
     }
 }
-
-
 
 // MARK: - Camera Manager Delegate
 internal protocol CameraManagerDelegate: AnyObject {

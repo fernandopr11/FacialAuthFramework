@@ -6,110 +6,115 @@ import AVFoundation
 public class FacialAuthManager {
     
     // MARK: - Properties
-    public weak var delegate: FacialAuthDelegate?
-    private var configuration: AuthConfiguration
-    
-    // Managers principales
-    private var encryptionManager: EncryptionManager
-    private var cameraManager: TrueDepthCameraManager
-    private var faceDetectionManager: FaceDetectionManager
-    private var realTimeProcessor: RealTimeProcessor
-    
-    // ML Components
-    private var modelManager: ModelManager
-    private var embeddingExtractor: FaceEmbeddingExtractor
-    private var embeddingComparator: EmbeddingComparator
-    private var modelTrainer: ModelTrainer
-    
-    // Estado actual
-    private var currentState: AuthState = .idle {
-        didSet {
-            delegate?.authenticationStateChanged(currentState)
+        public weak var delegate: FacialAuthDelegate?
+        private var configuration: AuthConfiguration
+        
+        // Managers principales
+        private var encryptionManager: EncryptionManager
+        private var cameraManager: TrueDepthCameraManager
+        private var faceDetectionManager: FaceDetectionManager
+        private var realTimeProcessor: RealTimeProcessor
+        
+        // ML Components
+        private var modelManager: ModelManager
+        private var embeddingExtractor: FaceEmbeddingExtractor
+        private var embeddingComparator: EmbeddingComparator
+        private var modelTrainer: ModelTrainer
+        
+        // Estado actual
+        private var currentState: AuthState = .idle {
+            didSet {
+                delegate?.authenticationStateChanged(currentState)
+            }
         }
-    }
-    
-    // Estado de operación
-    private var currentOperation: Operation?
-    private var capturedImages: [UIImage] = []
-    private var currentUserId: String?
-    private var parentViewController: UIViewController?
-    
-    // MARK: - Initialization
-    public init(configuration: AuthConfiguration = AuthConfiguration()) {
-        self.configuration = configuration
         
-        // Inicializar Security
-        self.encryptionManager = EncryptionManager(debugMode: configuration.debugMode)
+        // Estado de operación
+        private var currentOperation: Operation?
+        private var capturedImages: [UIImage] = []
+        private var currentUserId: String?
+        private var parentViewController: UIViewController?
         
-        // Inicializar ML
-        self.modelManager = ModelManager(debugMode: configuration.debugMode)
-        self.embeddingExtractor = FaceEmbeddingExtractor(modelManager: modelManager, debugMode: configuration.debugMode)
-        self.embeddingComparator = EmbeddingComparator(debugMode: configuration.debugMode)
-        self.modelTrainer = ModelTrainer(
-            modelManager: modelManager,
-            embeddingExtractor: embeddingExtractor,
-            embeddingComparator: embeddingComparator,
-            debugMode: configuration.debugMode
-        )
-        
-        // Inicializar Vision
-        self.cameraManager = TrueDepthCameraManager(debugMode: configuration.debugMode)
-        self.faceDetectionManager = FaceDetectionManager(debugMode: configuration.debugMode)
-        self.realTimeProcessor = RealTimeProcessor(
-            faceDetectionManager: faceDetectionManager,
-            debugMode: configuration.debugMode
-        )
-        
-        // Configurar delegates
-        setupDelegates()
-    }
+        // MARK: - Initialization
+        public init(configuration: AuthConfiguration = AuthConfiguration()) {
+            self.configuration = configuration
+            
+            // Inicializar Security
+            self.encryptionManager = EncryptionManager(debugMode: configuration.debugMode)
+            
+            // Inicializar ML
+            self.modelManager = ModelManager(debugMode: configuration.debugMode)
+            self.embeddingExtractor = FaceEmbeddingExtractor(modelManager: modelManager, debugMode: configuration.debugMode)
+            self.embeddingComparator = EmbeddingComparator(debugMode: configuration.debugMode)
+            
+            // ✅ FIX: Pasar encryptionManager al ModelTrainer
+            self.modelTrainer = ModelTrainer(
+                modelManager: modelManager,
+                embeddingExtractor: embeddingExtractor,
+                embeddingComparator: embeddingComparator,
+                encryptionManager: encryptionManager, // ✅ AGREGAR ESTE PARÁMETRO
+                debugMode: configuration.debugMode
+            )
+            
+            // Inicializar Vision
+            self.cameraManager = TrueDepthCameraManager(debugMode: configuration.debugMode)
+            self.faceDetectionManager = FaceDetectionManager(debugMode: configuration.debugMode)
+            self.realTimeProcessor = RealTimeProcessor(
+                faceDetectionManager: faceDetectionManager,
+                debugMode: configuration.debugMode
+            )
+            
+            // Configurar delegates
+            setupDelegates()
+        }
     
     // MARK: - Public API
     
     /// Inicializar el framework
-    public func initialize() {
-        currentState = .initializing
-        
-        if configuration.debugMode {
-            print("🚀 FacialAuth: Iniciando framework REAL...")
-        }
-        
-        Task {
-            do {
-                // Cargar modelo ML
-                try modelManager.loadModel()
-                
-                // Configurar cámara
-                try await cameraManager.setupCamera()
-                
-                await MainActor.run {
-                    currentState = .cameraReady
+        public func initialize() {
+            currentState = .initializing
+            
+            if configuration.debugMode {
+                print("🚀 FacialAuth: Iniciando framework con arquitectura de embeddings...")
+            }
+            
+            Task {
+                do {
+                    // Cargar modelo ML
+                    try modelManager.loadModel()
                     
-                    if configuration.debugMode {
-                        print("✅ FacialAuth: Framework REAL inicializado")
-                        print("   - Modelo ML: ✅")
-                        print("   - Cámara TrueDepth: ✅")
-                        print("   - Detección facial: ✅")
-                    }
-                }
-                
-            } catch {
-                await MainActor.run {
-                    currentState = .failed
+                    // Configurar cámara
+                    try await cameraManager.setupCamera()
                     
-                    if configuration.debugMode {
-                        print("❌ FacialAuth: Error inicializando: \(error)")
+                    await MainActor.run {
+                        currentState = .cameraReady
+                        
+                        if configuration.debugMode {
+                            print("✅ FacialAuth: Framework inicializado con arquitectura correcta")
+                            print("   - Modelo ML: ✅")
+                            print("   - Cámara TrueDepth: ✅")
+                            print("   - Detección facial: ✅")
+                            print("   - Embedding extraction: ✅")
+                        }
                     }
                     
-                    if let authError = error as? AuthError {
-                        delegate?.authenticationDidFail(error: authError)
-                    } else {
-                        delegate?.authenticationDidFail(error: .modelLoadingFailed)
+                } catch {
+                    await MainActor.run {
+                        currentState = .failed
+                        
+                        if configuration.debugMode {
+                            print("❌ FacialAuth: Error inicializando: \(error)")
+                        }
+                        
+                        if let authError = error as? AuthError {
+                            delegate?.authenticationDidFail(error: authError)
+                        } else {
+                            delegate?.authenticationDidFail(error: .modelLoadingFailed)
+                        }
                     }
                 }
             }
         }
-    }
+        
     
     /// Registrar un nuevo usuario (REAL con cámara + entrenamiento)
     public func registerUser(userId: String, displayName: String, in viewController: UIViewController) {
@@ -241,9 +246,13 @@ private extension FacialAuthManager {
         realTimeProcessor.enableAutoCapture(requirements: captureRequirements)
     }
     
-    func startCameraForCapture() {
+    
+    private func startCameraForCapture() {
         // Configurar processor según la operación
         updateComponentConfigurations()
+        
+        // ✅ CONECTAR VIDEO DELEGATE ANTES DE INICIAR
+        cameraManager.setVideoDelegate(realTimeProcessor)
         
         // Iniciar cámara
         cameraManager.startSession()
@@ -251,17 +260,96 @@ private extension FacialAuthManager {
         
         if configuration.debugMode {
             print("📹 FacialAuth: Cámara iniciada para captura")
+            print("📹 FacialAuth: Video delegate conectado al RealTimeProcessor")
         }
     }
     
-    func stopCurrentOperation() {
+    /// Obtener preview layer de la cámara para mostrar en UI
+    public func getCameraPreviewLayer() -> CALayer? {
+        return cameraManager.getPreviewLayer()
+    }
+    
+    // ✅ AGREGAR MÉTODO PARA CONFIGURAR PREVIEW EN VIEW CONTROLLER
+    public func setupCameraPreview(in viewController: UIViewController, previewView: UIView) {
+        guard let previewLayer = getCameraPreviewLayer() else {
+            if configuration.debugMode {
+                print("❌ FacialAuth: No se pudo obtener preview layer")
+            }
+            return
+        }
+        
+        // Configurar el preview layer
+        previewLayer.frame = previewView.bounds
+        previewView.layer.insertSublayer(previewLayer, at: 0)
+        
+        if configuration.debugMode {
+            print("📺 FacialAuth: Preview configurado en view")
+            print("   - Frame: \(previewView.bounds)")
+        }
+    }
+    
+    public func getAllRegisteredUsers() throws -> [String] {
+        let userIds = try encryptionManager.getAllRegisteredUsers()
+        
+        if configuration.debugMode {
+            print("📋 FacialAuth: \(userIds.count) usuarios registrados encontrados")
+            for userId in userIds {
+                print("   - \(userId)")
+            }
+        }
+        
+        return userIds
+    }
+    
+    public func getUserProfileInfo(userId: String) throws -> UserProfile? {
+        let profile = try encryptionManager.getUserProfileInfo(userId: userId)
+        
+        if configuration.debugMode {
+            if let profile = profile {
+                print("👤 FacialAuth: Perfil encontrado para \(userId)")
+                print("   - Nombre: \(profile.displayName)")
+                print("   - Creado: \(profile.createdAt)")
+                print("   - Muestras: \(profile.samplesCount)")
+            } else {
+                print("❌ FacialAuth: No se encontró perfil para \(userId)")
+            }
+        }
+        
+        return profile
+    }
+    
+    /// Verificar integridad de datos de usuario
+    public func verifyUserDataIntegrity(userId: String) throws -> Bool {
+        let isValid = try encryptionManager.verifyUserDataIntegrity(userId: userId)
+        
+        if configuration.debugMode {
+            print("🔍 FacialAuth: Integridad de \(userId): \(isValid ? "✅ Válida" : "❌ Corrupta")")
+        }
+        
+        return isValid
+    }
+    
+    
+    /// Eliminar usuario registrado
+    public func deleteUser(userId: String) throws {
+        try encryptionManager.deleteUser(userId: userId)
+        
+        if configuration.debugMode {
+            print("🗑️ FacialAuth: Usuario \(userId) eliminado")
+        }
+    }
+    
+    private func stopCurrentOperation() {
         realTimeProcessor.stopProcessing()
         cameraManager.stopSession()
+        
+        if configuration.debugMode {
+            print("🛑 Operación detenida - Imágenes capturadas: \(capturedImages.count)")
+        }
         
         currentOperation = nil
         currentUserId = nil
         parentViewController = nil
-        capturedImages.removeAll()
     }
     
     func handleCapturedImage(_ image: UIImage) {
@@ -290,10 +378,18 @@ private extension FacialAuthManager {
             print("📸 Registro: Muestra \(currentSamples)/\(targetSamples) capturada")
         }
         
-        // Si tenemos suficientes muestras, iniciar entrenamiento
+        // ✅ BUG FIX: Verificar si tenemos suficientes muestras DESPUÉS de agregar la imagen
         if currentSamples >= targetSamples {
             stopCurrentOperation()
-            startTraining(userId: userId, displayName: displayName, images: capturedImages)
+            
+            // ✅ CRITICAL FIX: Usar capturedImages ANTES de que se limpie
+            let imagesToTrain = capturedImages // Capturar referencia local
+            
+            if configuration.debugMode {
+                print("🏋️ Iniciando entrenamiento con \(imagesToTrain.count) imágenes")
+            }
+            
+            startTraining(userId: userId, displayName: displayName, images: imagesToTrain)
         }
     }
     
@@ -393,6 +489,21 @@ private extension FacialAuthManager {
         let trainer = self.modelTrainer
         let config = self.configuration
         
+        // ✅ VERIFICACIÓN DE SEGURIDAD
+        guard !images.isEmpty else {
+            if config.debugMode {
+                print("❌ ERROR: No hay imágenes para entrenar!")
+            }
+            
+            currentState = .failed
+            delegate?.registrationDidFail(error: .processingFailed)
+            return
+        }
+        
+        if config.debugMode {
+            print("🏋️ Entrenamiento iniciado con \(images.count) imágenes")
+        }
+        
         Task {
             do {
                 // Iniciar entrenamiento en vivo
@@ -403,11 +514,14 @@ private extension FacialAuthManager {
                 )
                 
                 await MainActor.run {
+                    // ✅ LIMPIAR IMÁGENES SOLO DESPUÉS DEL ÉXITO
+                    capturedImages.removeAll()
+                    
                     // El entrenamiento fue exitoso, crear perfil
                     let profile = UserProfile(
                         userId: userId,
                         displayName: displayName,
-                        encryptedEmbeddings: Data(), // Se llena en el entrenamiento
+                        encryptedEmbeddings: Data(),
                         samplesCount: images.count
                     )
                     
@@ -433,6 +547,8 @@ private extension FacialAuthManager {
                 
             } catch {
                 await MainActor.run {
+                    capturedImages.removeAll()
+                    
                     currentState = .failed
                     
                     if config.debugMode {
