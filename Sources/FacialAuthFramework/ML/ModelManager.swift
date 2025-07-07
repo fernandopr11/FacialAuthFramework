@@ -24,17 +24,39 @@ internal class ModelManager {
             print("🤖 ModelManager: Cargando modelo \(modelName)...")
         }
         
-        // Buscar el modelo en el bundle del framework
-        guard let modelURL = Bundle.module.url(forResource: modelName, withExtension: "mlmodel") else {
+        // En Swift Package, usar Bundle.module para acceder a los recursos
+        // Intentar primero con .mlmodelc (compilado) y después con .mlmodel (original)
+        var modelURL: URL?
+        
+        // Primero intentar con la extensión compilada
+        modelURL = Bundle.module.url(forResource: modelName, withExtension: "mlmodelc")
+        
+        // Si no existe, intentar con la extensión original
+        if modelURL == nil {
+            modelURL = Bundle.module.url(forResource: modelName, withExtension: "mlmodel")
+        }
+        
+        guard let finalModelURL = modelURL else {
             if debugMode {
                 print("❌ ModelManager: Modelo no encontrado en bundle")
+                // Debug adicional para ver qué recursos están disponibles
+                print("📂 Recursos disponibles en bundle:")
+                if let resourcePath = Bundle.module.resourcePath {
+                    print("   Path: \(resourcePath)")
+                    do {
+                        let contents = try FileManager.default.contentsOfDirectory(atPath: resourcePath)
+                        print("   Contenidos: \(contents)")
+                    } catch {
+                        print("   Error listando contenidos: \(error)")
+                    }
+                }
             }
             throw ModelError.modelNotFound
         }
         
         do {
             // Cargar modelo CoreML
-            let loadedMLModel = try MLModel(contentsOf: modelURL)
+            let loadedMLModel = try MLModel(contentsOf: finalModelURL)
             self.mlModel = loadedMLModel
             
             // Crear VNCoreMLModel para usar con Vision
@@ -42,6 +64,7 @@ internal class ModelManager {
             
             if debugMode {
                 print("✅ ModelManager: Modelo cargado exitosamente")
+                print("📊 ModelManager: URL del modelo: \(finalModelURL)")
                 print("📊 ModelManager: Descripción del modelo:")
                 print("   - Input: \(loadedMLModel.modelDescription.inputDescriptionsByName)")
                 print("   - Output: \(loadedMLModel.modelDescription.outputDescriptionsByName)")
