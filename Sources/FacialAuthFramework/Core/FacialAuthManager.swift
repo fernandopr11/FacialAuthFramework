@@ -287,7 +287,7 @@ private extension FacialAuthManager {
             print("   - Frame: \(previewView.bounds)")
         }
     }
-    
+
     public func getAllRegisteredUsers() throws -> [String] {
         let userIds = try encryptionManager.getAllRegisteredUsers()
         
@@ -370,20 +370,22 @@ private extension FacialAuthManager {
         let targetSamples = configuration.maxTrainingSamples
         let currentSamples = capturedImages.count
         
-        // Notificar progreso de captura
-        let progress = Float(currentSamples) / Float(targetSamples)
-        delegate?.registrationProgress(progress * 0.5) // Primera mitad = captura
+        // ✅ NOTIFICAR CADA MUESTRA CAPTURADA
+        delegate?.trainingSampleCaptured(sampleCount: currentSamples, totalNeeded: targetSamples)
+        
+        // ✅ PROGRESO REAL DE CAPTURA
+        let captureProgress = Float(currentSamples) / Float(targetSamples)
+        delegate?.registrationProgress(captureProgress * 0.5) // Primera mitad
         
         if configuration.debugMode {
             print("📸 Registro: Muestra \(currentSamples)/\(targetSamples) capturada")
         }
         
-        // ✅ BUG FIX: Verificar si tenemos suficientes muestras DESPUÉS de agregar la imagen
+        // ✅ INICIAR ENTRENAMIENTO CUANDO ESTÉ COMPLETO
         if currentSamples >= targetSamples {
             stopCurrentOperation()
             
-            // ✅ CRITICAL FIX: Usar capturedImages ANTES de que se limpie
-            let imagesToTrain = capturedImages // Capturar referencia local
+            let imagesToTrain = capturedImages // ✅ CAPTURAR ANTES DE LIMPIAR
             
             if configuration.debugMode {
                 print("🏋️ Iniciando entrenamiento con \(imagesToTrain.count) imágenes")
@@ -502,13 +504,16 @@ private extension FacialAuthManager {
         
         if config.debugMode {
             print("🏋️ Entrenamiento iniciado con \(images.count) imágenes")
+            print("🏋️ Usuario: \(userId)")
+            print("🏋️ Display Name: '\(displayName)'") // ✅ DEBUG
         }
         
         Task {
             do {
-                // Iniciar entrenamiento en vivo
+                // ✅ PASAR EL DISPLAY NAME AL TRAINER
                 let metrics = try await trainer.trainUserModel(
                     userId: userId,
+                    displayName: displayName, // ✅ PASAR EL NOMBRE REAL
                     images: images,
                     mode: config.trainingMode
                 )
@@ -520,7 +525,7 @@ private extension FacialAuthManager {
                     // El entrenamiento fue exitoso, crear perfil
                     let profile = UserProfile(
                         userId: userId,
-                        displayName: displayName,
+                        displayName: displayName, // ✅ USAR EL NOMBRE REAL
                         encryptedEmbeddings: Data(),
                         samplesCount: images.count
                     )
