@@ -40,6 +40,7 @@ internal class ModelTrainer {
     /// ✅ NUEVO ENFOQUE: Extraer embeddings y crear perfil (NO entrenar clasificador)
     internal func trainUserModel(
         userId: String,
+        displayName: String, // ✅ AGREGAR ESTE PARÁMETRO
         images: [UIImage],
         mode: TrainingMode
     ) async throws -> TrainingMetrics {
@@ -56,6 +57,7 @@ internal class ModelTrainer {
             print("🎯 ModelTrainer: Procesando embeddings para \(userId)")
             print("   - Modo: \(mode.displayName)")
             print("   - Imágenes: \(images.count)")
+            print("   - Display Name: '\(displayName)'") // ✅ DEBUG
             print("   - Enfoque: Embedding averaging (NO clasificación)")
         }
         
@@ -72,8 +74,8 @@ internal class ModelTrainer {
             // ✅ PROCESO REAL: Crear embedding maestro promediado
             let masterEmbedding = try createMasterEmbedding(from: allEmbeddings)
             
-            // ✅ PROCESO REAL: Guardar embedding encriptado
-            try await saveMasterEmbedding(masterEmbedding, for: userId, displayName: "Usuario \(userId)")
+            // ✅ PROCESO REAL: Guardar embedding encriptado CON EL NOMBRE REAL
+            try await saveMasterEmbedding(masterEmbedding, for: userId, displayName: displayName) // ✅ PASAR EL NOMBRE REAL
             
             let endTime = Date()
             let totalTime = endTime.timeIntervalSince(startTime)
@@ -82,8 +84,8 @@ internal class ModelTrainer {
             let metrics = TrainingMetrics(
                 mode: mode,
                 totalTime: totalTime,
-                finalAccuracy: 0.95, // High accuracy for embedding approach
-                finalLoss: 0.05,     // Low loss for embedding approach
+                finalAccuracy: 0.95,
+                finalLoss: 0.05,
                 epochsCompleted: mode.epochs,
                 samplesUsed: images.count,
                 startTime: startTime,
@@ -100,6 +102,7 @@ internal class ModelTrainer {
                 print("   - Tiempo total: \(String(format: "%.1f", metrics.totalTime))s")
                 print("   - Embedding dimension: \(masterEmbedding.count)")
                 print("   - Muestras procesadas: \(images.count)")
+                print("   - Nombre guardado: '\(displayName)'") // ✅ DEBUG
             }
             
             return metrics
@@ -228,17 +231,19 @@ private extension ModelTrainer {
     func saveMasterEmbedding(_ embedding: [Float], for userId: String, displayName: String) async throws {
         if debugMode {
             print("💾 ModelTrainer: Guardando embedding maestro para \(userId)...")
+            print("💾 ModelTrainer: Display name recibido: '\(displayName)'") // ✅ DEBUG
         }
         
-        // Usar EncryptionManager para guardar de forma segura
+        // ✅ USAR EncryptionManager para guardar de forma segura CON EL NOMBRE CORRECTO
         try encryptionManager.saveUserProfile(
             userId: userId,
-            displayName: displayName,
+            displayName: displayName, // ✅ PASAR EL NOMBRE REAL
             embeddings: embedding
         )
         
         if debugMode {
             print("✅ ModelTrainer: Embedding maestro guardado exitosamente")
+            print("✅ ModelTrainer: Nombre usado: '\(displayName)'") // ✅ DEBUG
         }
     }
     
